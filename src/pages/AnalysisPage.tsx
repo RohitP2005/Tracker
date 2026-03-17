@@ -1,34 +1,44 @@
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { getDailyCompletionData, getCompletionRate } from '@/lib/store';
-import { DAY_SHORT } from '@/lib/types';
+import { getDailyCompletionData, getCompletionRate, getDailyDietData, getDietCompletionRate } from '@/lib/store';
+import { Flame, Dumbbell } from 'lucide-react';
 
 type Range = 'week' | 'month';
+type AnalysisView = 'tasks' | 'diet';
 
 export default function AnalysisPage() {
   const [range, setRange] = useState<Range>('week');
+  const [view, setView] = useState<AnalysisView>('tasks');
   const today = new Date();
-
   const days = range === 'week' ? 7 : 30;
-  const data = useMemo(() => getDailyCompletionData(today, days), [range]);
 
-  const weekStart = new Date(today);
-  weekStart.setDate(weekStart.getDate() - 6);
-  const monthStart = new Date(today);
-  monthStart.setDate(monthStart.getDate() - 29);
+  const taskData = useMemo(() => getDailyCompletionData(today, days), [range]);
+  const dietData = useMemo(() => getDailyDietData(today, days), [range]);
 
-  const currentRate = range === 'week'
-    ? getCompletionRate(weekStart, today)
-    : getCompletionRate(monthStart, today);
+  const weekStart = new Date(today); weekStart.setDate(weekStart.getDate() - 6);
+  const monthStart = new Date(today); monthStart.setDate(monthStart.getDate() - 29);
+  const start = range === 'week' ? weekStart : monthStart;
 
-  const prevEnd = new Date(range === 'week' ? weekStart : monthStart);
-  prevEnd.setDate(prevEnd.getDate() - 1);
-  const prevStart = new Date(prevEnd);
-  prevStart.setDate(prevStart.getDate() - days + 1);
-  const prevRate = getCompletionRate(prevStart, prevEnd);
-  const rateDiff = currentRate - prevRate;
+  const taskRate = getCompletionRate(start, today);
+  const dietRate = getDietCompletionRate(start, today);
 
+  const prevEnd = new Date(start); prevEnd.setDate(prevEnd.getDate() - 1);
+  const prevStart = new Date(prevEnd); prevStart.setDate(prevStart.getDate() - days + 1);
+  const prevTaskRate = getCompletionRate(prevStart, prevEnd);
+  const prevDietRate = getDietCompletionRate(prevStart, prevEnd);
+  const taskDiff = taskRate - prevTaskRate;
+  const dietDiff = dietRate - prevDietRate;
+
+  const data = view === 'tasks' ? taskData : dietData;
+  const currentRate = view === 'tasks' ? taskRate : dietRate;
+  const rateDiff = view === 'tasks' ? taskDiff : dietDiff;
   const maxTotal = Math.max(...data.map(d => d.total), 1);
+
+  // Diet aggregate stats
+  const totalCalConsumed = dietData.reduce((s, d) => s + (d as any).caloriesConsumed, 0);
+  const totalCalPlanned = dietData.reduce((s, d) => s + (d as any).caloriesTotal, 0);
+  const totalProtConsumed = dietData.reduce((s, d) => s + (d as any).proteinConsumed, 0);
+  const totalProtPlanned = dietData.reduce((s, d) => s + (d as any).proteinTotal, 0);
 
   return (
     <div className="min-h-screen pb-28">
@@ -37,36 +47,34 @@ export default function AnalysisPage() {
         <p className="text-caption mt-1">Track your consistency over time.</p>
       </div>
 
+      {/* View toggle */}
+      <div className="px-6 mb-4">
+        <div className="flex gap-2 p-1 rounded-xl bg-secondary">
+          {(['tasks', 'diet'] as AnalysisView[]).map(v => (
+            <button key={v} onClick={() => setView(v)} className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all capitalize ${
+              view === v ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground'
+            }`}>{v}</button>
+          ))}
+        </div>
+      </div>
+
       {/* Range toggle */}
       <div className="px-6 mb-6">
         <div className="flex gap-2 p-1 rounded-xl bg-secondary">
           {(['week', 'month'] as Range[]).map(r => (
-            <button
-              key={r}
-              onClick={() => setRange(r)}
-              className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all capitalize ${
-                range === r ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground'
-              }`}
-            >
-              {r}
-            </button>
+            <button key={r} onClick={() => setRange(r)} className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all capitalize ${
+              range === r ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground'
+            }`}>{r}</button>
           ))}
         </div>
       </div>
 
       {/* Big number */}
       <div className="px-6 mb-8">
-        <motion.div
-          key={range}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="card-surface p-6 text-center"
-        >
-          <p className="text-[56px] font-bold tracking-tighter tabular text-primary leading-none">
-            {currentRate}%
-          </p>
+        <motion.div key={`${view}-${range}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="card-surface p-6 text-center">
+          <p className="text-[56px] font-bold tracking-tighter tabular text-primary leading-none">{currentRate}%</p>
           <p className="text-caption mt-2">
-            completion this {range}
+            {view === 'tasks' ? 'completion' : 'diet adherence'} this {range}
             {rateDiff !== 0 && (
               <span className={rateDiff > 0 ? ' text-primary' : ' text-warning'}>
                 {' '}{rateDiff > 0 ? '+' : ''}{rateDiff}% from last {range}
@@ -76,6 +84,22 @@ export default function AnalysisPage() {
         </motion.div>
       </div>
 
+      {/* Diet macro stats */}
+      {view === 'diet' && (
+        <div className="px-6 mb-8 grid grid-cols-2 gap-3">
+          <div className="card-surface p-4 text-center">
+            <Flame className="w-5 h-5 text-warning mx-auto mb-1" />
+            <p className="text-[24px] font-bold tracking-tighter tabular text-foreground">{totalCalConsumed}</p>
+            <p className="text-caption">of {totalCalPlanned} kcal</p>
+          </div>
+          <div className="card-surface p-4 text-center">
+            <Dumbbell className="w-5 h-5 text-primary mx-auto mb-1" />
+            <p className="text-[24px] font-bold tracking-tighter tabular text-foreground">{totalProtConsumed}g</p>
+            <p className="text-caption">of {totalProtPlanned}g protein</p>
+          </div>
+        </div>
+      )}
+
       {/* Bar chart */}
       <div className="px-6 mb-8">
         <p className="text-section text-muted-foreground mb-4">DAILY BREAKDOWN</p>
@@ -84,12 +108,7 @@ export default function AnalysisPage() {
             {data.map((d, i) => (
               <div key={i} className="flex-1 flex flex-col items-center gap-1">
                 <div className="w-full relative" style={{ height: 100 }}>
-                  {/* Total bar */}
-                  <div
-                    className="absolute bottom-0 w-full rounded-t bg-secondary"
-                    style={{ height: `${(d.total / maxTotal) * 100}%` }}
-                  />
-                  {/* Completed bar */}
+                  <div className="absolute bottom-0 w-full rounded-t bg-secondary" style={{ height: `${(d.total / maxTotal) * 100}%` }} />
                   <motion.div
                     initial={{ height: 0 }}
                     animate={{ height: `${(d.completed / maxTotal) * 100}%` }}
@@ -114,13 +133,13 @@ export default function AnalysisPage() {
           <p className="text-[28px] font-bold tracking-tighter tabular text-foreground">
             {data.reduce((s, d) => s + d.completed, 0)}
           </p>
-          <p className="text-caption mt-1">Tasks completed</p>
+          <p className="text-caption mt-1">{view === 'tasks' ? 'Tasks completed' : 'Meals tracked'}</p>
         </div>
         <div className="card-surface p-4">
           <p className="text-[28px] font-bold tracking-tighter tabular text-foreground">
             {data.reduce((s, d) => s + d.total - d.completed, 0)}
           </p>
-          <p className="text-caption mt-1">Tasks missed</p>
+          <p className="text-caption mt-1">{view === 'tasks' ? 'Tasks missed' : 'Meals missed'}</p>
         </div>
         <div className="card-surface p-4">
           <p className="text-[28px] font-bold tracking-tighter tabular text-foreground">
