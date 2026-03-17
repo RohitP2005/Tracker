@@ -1,23 +1,23 @@
 import { motion } from 'framer-motion';
-import { Task, PERIODS, Period } from '@/lib/types';
-import TaskCard from './TaskCard';
-import { isTaskCompleted, toggleTaskCompletion } from '@/lib/store';
+import { DietItem, PERIODS, Period } from '@/lib/types';
+import DietCard from './DietCard';
+import { isDietCompleted, toggleDietCompletion } from '@/lib/store';
 import { useState } from 'react';
 
-interface PeriodSectionProps {
+interface DietSectionProps {
   period: Period;
-  tasks: Task[];
+  items: DietItem[];
   date: Date;
   isActive: boolean;
   onUpdate: () => void;
 }
 
-export default function PeriodSection({ period, tasks, date, isActive, onUpdate }: PeriodSectionProps) {
+export default function DietSection({ period, items, date, isActive, onUpdate }: DietSectionProps) {
   const [collapsed, setCollapsed] = useState(!isActive);
   const periodInfo = PERIODS.find(p => p.key === period)!;
-  const completedCount = tasks.filter(t => isTaskCompleted(t.id, date)).length;
+  const completedCount = items.filter(i => isDietCompleted(i.id, date)).length;
 
-  if (tasks.length === 0) return null;
+  if (items.length === 0) return null;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="px-6">
@@ -26,7 +26,7 @@ export default function PeriodSection({ period, tasks, date, isActive, onUpdate 
           <span className={`text-section ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}>
             {periodInfo.label}
           </span>
-          <span className="text-caption tabular">{completedCount}/{tasks.length}</span>
+          <span className="text-caption tabular">{completedCount}/{items.length}</span>
         </div>
         <span className="text-[12px] text-muted-foreground tabular">{periodInfo.timeRange}</span>
       </button>
@@ -39,12 +39,12 @@ export default function PeriodSection({ period, tasks, date, isActive, onUpdate 
           transition={{ duration: 0.3, ease: [0.2, 0, 0, 1] }}
           className="flex flex-col gap-2 pb-4"
         >
-          {tasks.map((task, i) => (
-            <motion.div key={task.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-              <TaskCard
-                task={task}
-                completed={isTaskCompleted(task.id, date)}
-                onToggle={() => { toggleTaskCompletion(task.id, date); onUpdate(); }}
+          {items.map((item, i) => (
+            <motion.div key={item.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
+              <DietCard
+                item={item}
+                completed={isDietCompleted(item.id, date)}
+                onToggle={() => { toggleDietCompletion(item.id, date); onUpdate(); }}
               />
             </motion.div>
           ))}

@@ -1,10 +1,11 @@
-export type Period = 'morning' | 'post-morning' | 'afternoon' | 'evening' | 'night';
+export type Period = 'morning' | 'afternoon' | 'evening' | 'night';
 
 export interface Task {
   id: string;
   name: string;
   duration: number | null; // minutes
   period: Period;
+  specificTime?: string; // HH:MM format for exact time scheduling
   isSpecial?: boolean;
   specialDate?: string; // ISO date for one-time events
 }
@@ -23,9 +24,28 @@ export interface CompletionRecord {
   completed: boolean;
 }
 
+// Diet types
+export interface DietItem {
+  id: string;
+  name: string;
+  calories: number;
+  protein: number; // grams
+  period: Period;
+  specificTime?: string;
+}
+
+export interface WeeklyDietItem extends DietItem {
+  days: number[];
+}
+
+export interface DietCompletionRecord {
+  itemId: string;
+  date: string;
+  completed: boolean;
+}
+
 export const PERIODS: { key: Period; label: string; timeRange: string }[] = [
-  { key: 'morning', label: 'MORNING', timeRange: '6:00 – 9:00' },
-  { key: 'post-morning', label: 'POST-MORNING', timeRange: '9:00 – 12:00' },
+  { key: 'morning', label: 'MORNING', timeRange: '6:00 – 12:00' },
   { key: 'afternoon', label: 'AFTERNOON', timeRange: '12:00 – 17:00' },
   { key: 'evening', label: 'EVENING', timeRange: '17:00 – 21:00' },
   { key: 'night', label: 'NIGHT', timeRange: '21:00 – 00:00' },
