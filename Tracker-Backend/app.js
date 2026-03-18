@@ -6,9 +6,23 @@ const stateRoutes = require("./state.routes");
 const app = express();
 const PORT = process.env.PORT || 3000;
 const MONGO_URI =
-	process.env.MONGO_URI || "mongodb+srv://maverick:Ha33ezHHrCv3iT@cluster.yucb3sn.mongodb.net/";
+	process.env.MONGO_URI 
 
-app.use(cors());
+// CORS: only allow requests from configured frontend origins
+const allowedOriginsEnv = process.env.CORS_ORIGINS || "http://localhost:8080";
+const allowedOrigins = allowedOriginsEnv.split(",").map((o) => o.trim()).filter(Boolean);
+
+app.use(
+	cors({
+		origin(origin, callback) {
+			// Allow same-origin or tools (no origin header)
+			if (!origin) return callback(null, true);
+			if (allowedOrigins.includes(origin)) return callback(null, true);
+			return callback(new Error("Not allowed by CORS"));
+		},
+		credentials: true,
+	})
+);
 app.use(express.json());
 
 app.use("/api", stateRoutes);
