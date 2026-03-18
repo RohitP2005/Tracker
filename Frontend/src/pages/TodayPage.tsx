@@ -14,8 +14,9 @@ function getCurrentPeriod(): Period {
   if (hour < 21) return 'evening';
   return 'night';
 }
+type TodayPageProps = { syncVersion: number };
 
-export default function TodayPage() {
+export default function TodayPage({ syncVersion }: TodayPageProps) {
   const [updateKey, setUpdateKey] = useState(0);
   const [view, setView] = useState<'tasks' | 'diet'>('tasks');
   const today = new Date();

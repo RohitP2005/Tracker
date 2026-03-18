@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { WeeklyTask, Task, WeeklyDietItem, PERIODS, Period, DAY_SHORT } from '@/lib/types';
 import {
@@ -8,8 +8,9 @@ import {
 import { Plus, X, Calendar, Repeat, Trash2, UtensilsCrossed, Flame, Dumbbell } from 'lucide-react';
 
 type ViewMode = 'weekly' | 'events' | 'diet';
+type PlanPageProps = { syncVersion: number };
 
-export default function PlanPage() {
+export default function PlanPage({ syncVersion }: PlanPageProps) {
   const [mode, setMode] = useState<ViewMode>('weekly');
   const [weeklyTasks, setWeeklyTasks] = useState<WeeklyTask[]>(getWeeklyTasks());
   const [specialTasks, setSpecialTasks] = useState<Task[]>(getSpecialTasks());
@@ -30,6 +31,16 @@ export default function PlanPage() {
   const isDiet = mode === 'diet';
 
   const refresh = useCallback(() => setUpdateKey(k => k + 1), []);
+
+  // When the backend sync completes (signaled via syncVersion from App),
+  // re-read the latest state from localStorage so this tab/device shows
+  // the cloud data instead of the initial hardcoded defaults.
+  useEffect(() => {
+    setWeeklyTasks(getWeeklyTasks());
+    setSpecialTasks(getSpecialTasks());
+    setWeeklyDiet(getWeeklyDiet());
+    refresh();
+  }, [syncVersion, refresh]);
 
   const resetForm = () => {
     setNewName(''); setNewDuration(''); setNewPeriod('morning');
