@@ -160,7 +160,7 @@ export default function PlanPage() {
                       <div className="flex gap-1.5">
                         {DAY_SHORT.map((d, i) => (
                           <span key={d} className={`w-8 h-6 flex items-center justify-center rounded text-[11px] ${
-                            task.days.includes(i) ? 'bg-primary/15 text-primary font-medium' : 'bg-secondary text-muted-foreground/40'
+                            task.days && task.days.includes(i) ? 'bg-primary/15 text-primary font-medium' : 'bg-secondary text-muted-foreground/40'
                           }`}>{d}</span>
                         ))}
                       </div>
@@ -242,7 +242,7 @@ export default function PlanPage() {
                       <div className="flex gap-1.5">
                         {DAY_SHORT.map((d, i) => (
                           <span key={d} className={`w-8 h-6 flex items-center justify-center rounded text-[11px] ${
-                            item.days.includes(i) ? 'bg-primary/15 text-primary font-medium' : 'bg-secondary text-muted-foreground/40'
+                            item.days && item.days.includes(i) ? 'bg-primary/15 text-primary font-medium' : 'bg-secondary text-muted-foreground/40'
                           }`}>{d}</span>
                         ))}
                       </div>
@@ -259,7 +259,7 @@ export default function PlanPage() {
       <motion.button
         whileTap={{ scale: 0.9 }}
         onClick={() => setShowAdd(true)}
-        className="fixed bottom-24 right-6 w-14 h-14 rounded-2xl bg-primary flex items-center justify-center shadow-lg z-50"
+        className="fixed bottom-32 right-6 w-14 h-14 rounded-2xl bg-primary flex items-center justify-center shadow-lg z-50"
       >
         <Plus className="w-6 h-6 text-primary-foreground" />
       </motion.button>

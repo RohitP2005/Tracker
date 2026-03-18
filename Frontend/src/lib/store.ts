@@ -1,4 +1,5 @@
 import { WeeklyTask, CompletionRecord, Task, Period, DietItem, WeeklyDietItem, DietCompletionRecord } from './types';
+import { apiGet, apiPut } from './api';
 
 const STORAGE_KEYS = {
   weeklyTasks: 'rhythm-weekly-tasks',
@@ -31,6 +32,26 @@ const DEFAULT_WEEKLY_DIET: WeeklyDietItem[] = [
   { id: 'd6', name: 'Casein Shake', calories: 120, protein: 24, period: 'night', days: [1,3,5] },
 ];
 
+const ALL_DAYS: number[] = [0, 1, 2, 3, 4, 5, 6];
+
+function normalizeWeeklyTasks(tasks: WeeklyTask[] | unknown): WeeklyTask[] {
+  if (!Array.isArray(tasks)) return [];
+  return (tasks as WeeklyTask[]).map(task => {
+    const rawDays = (task as any).days;
+    const days = Array.isArray(rawDays) && rawDays.length > 0 ? rawDays : ALL_DAYS;
+    return { ...task, days };
+  });
+}
+
+function normalizeWeeklyDiet(items: WeeklyDietItem[] | unknown): WeeklyDietItem[] {
+  if (!Array.isArray(items)) return [];
+  return (items as WeeklyDietItem[]).map(item => {
+    const rawDays = (item as any).days;
+    const days = Array.isArray(rawDays) && rawDays.length > 0 ? rawDays : ALL_DAYS;
+    return { ...item, days };
+  });
+}
+
 function load<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key);
@@ -40,6 +61,66 @@ function load<T>(key: string, fallback: T): T {
 
 function save<T>(key: string, data: T) {
   localStorage.setItem(key, JSON.stringify(data));
+  void pushStateToServer();
+}
+
+type ServerState = {
+  weeklyTasks: WeeklyTask[];
+  specialTasks: Task[];
+  completions: CompletionRecord[];
+  weeklyDiet: WeeklyDietItem[];
+  specialDiet: DietItem[];
+  dietCompletions: DietCompletionRecord[];
+};
+
+let pushing = false;
+
+function getLocalState(): ServerState {
+  return {
+    weeklyTasks: normalizeWeeklyTasks(load(STORAGE_KEYS.weeklyTasks, DEFAULT_WEEKLY_TASKS)),
+    specialTasks: load(STORAGE_KEYS.specialTasks, [] as Task[]),
+    completions: load(STORAGE_KEYS.completions, [] as CompletionRecord[]),
+    weeklyDiet: normalizeWeeklyDiet(load(STORAGE_KEYS.weeklyDiet, DEFAULT_WEEKLY_DIET)),
+    specialDiet: load(STORAGE_KEYS.specialDiet, [] as DietItem[]),
+    dietCompletions: load(STORAGE_KEYS.dietCompletions, [] as DietCompletionRecord[]),
+  };
+}
+
+async function pushStateToServer() {
+  if (pushing) return;
+  pushing = true;
+  try {
+    const state = getLocalState();
+    await apiPut<ServerState, void>('/state', state);
+  } catch (error) {
+    // Fail silently; remain fully functional offline.
+    console.error('Failed to sync state to server', error);
+  } finally {
+    pushing = false;
+  }
+}
+
+export async function syncFromServer() {
+  try {
+    const remote = await apiGet<ServerState>('/state');
+    if (!remote) return;
+
+    try {
+      const weeklyTasks = normalizeWeeklyTasks(remote.weeklyTasks ?? DEFAULT_WEEKLY_TASKS);
+      const weeklyDiet = normalizeWeeklyDiet(remote.weeklyDiet ?? DEFAULT_WEEKLY_DIET);
+
+      localStorage.setItem(STORAGE_KEYS.weeklyTasks, JSON.stringify(weeklyTasks));
+      localStorage.setItem(STORAGE_KEYS.specialTasks, JSON.stringify(remote.specialTasks ?? []));
+      localStorage.setItem(STORAGE_KEYS.completions, JSON.stringify(remote.completions ?? []));
+      localStorage.setItem(STORAGE_KEYS.weeklyDiet, JSON.stringify(weeklyDiet));
+      localStorage.setItem(STORAGE_KEYS.specialDiet, JSON.stringify(remote.specialDiet ?? []));
+      localStorage.setItem(STORAGE_KEYS.dietCompletions, JSON.stringify(remote.dietCompletions ?? []));
+    } catch {
+      // Ignore storage errors; state will still be available in memory for this session via getLocalState.
+    }
+  } catch (error) {
+    console.error('Failed to pull state from server', error);
+  }
 }
 
 // --- Tasks ---
@@ -72,7 +153,7 @@ export function getTasksForDate(date: Date): Task[] {
   const dateStr = date.toISOString().split('T')[0];
   
   const weekly = getWeeklyTasks()
-    .filter(t => t.days.includes(dayOfWeek))
+    .filter(t => Array.isArray((t as any).days) && (t as any).days.includes(dayOfWeek))
     .map(({ days, ...rest }) => rest as Task);
   
   const special = getSpecialTasks().filter(t => t.specialDate === dateStr);
@@ -136,7 +217,7 @@ export function getDietForDate(date: Date): DietItem[] {
   const dateStr = date.toISOString().split('T')[0];
   
   const weekly = getWeeklyDiet()
-    .filter(t => t.days.includes(dayOfWeek))
+    .filter(t => Array.isArray((t as any).days) && (t as any).days.includes(dayOfWeek))
     .map(({ days, ...rest }) => rest as DietItem);
   
   const special = getSpecialDiet().filter(t => (t as any).specialDate === dateStr);
