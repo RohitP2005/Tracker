@@ -1,3 +1,5 @@
+require("dotenv").config();
+
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
@@ -5,8 +7,8 @@ const stateRoutes = require("./state.routes");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const MONGO_URI =
-	process.env.MONGO_URI 
+// Support both MONGO_URI and MONGODB_URI env var names
+const MONGO_URI = process.env.MONGODB_URI;
 
 // CORS: only allow requests from configured frontend origins
 const allowedOriginsEnv = process.env.CORS_ORIGINS || "http://localhost:8080";
