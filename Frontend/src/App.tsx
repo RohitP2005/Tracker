@@ -22,6 +22,21 @@ const App = () => {
     })();
   }, []);
 
+  // Keep multiple tabs/windows in sync by listening for
+  // localStorage changes written by other tabs. When any
+  // key changes, bump syncVersion so pages re-read state
+  // from localStorage (which has already been pushed to
+  // the server by the writing tab).
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.storageArea !== window.localStorage) return;
+      setSyncVersion((v) => v + 1);
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>

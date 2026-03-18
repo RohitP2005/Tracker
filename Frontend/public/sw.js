@@ -1,4 +1,4 @@
-const CACHE_NAME = "rhythm-cache-v1";
+const CACHE_NAME = "tracking-cache-v2";
 const OFFLINE_URLS = ["/", "/index.html"];
 
 self.addEventListener("install", (event) => {
@@ -23,6 +23,15 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+
+  const url = new URL(event.request.url);
+
+  // Never cache API/state calls so the app always
+  // sees the latest data from the backend.
+  if (url.pathname.startsWith("/state")) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then((cached) => {

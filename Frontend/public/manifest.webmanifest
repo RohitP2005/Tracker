@@ -1,6 +1,6 @@
 {
-  "name": "Rhythm — Daily Checklist",
-  "short_name": "Rhythm",
+  "name": "Tracking - Daily Habit App",
+  "short_name": "Tracking",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
