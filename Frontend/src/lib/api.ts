@@ -2,16 +2,19 @@ import { z } from "zod";
 
 const baseUrlSchema = z.string().url();
 
-const DEFAULT_API_BASE_URL = "http://localhost:3000/api";
-
 export const API_BASE_URL = (() => {
   const raw = (import.meta as any).env?.VITE_API_BASE_URL as string | undefined;
 
-  // If not set, fall back to default backend URL
-  if (!raw) return DEFAULT_API_BASE_URL;
+  if (!raw) {
+    throw new Error("VITE_API_BASE_URL is not set. Please configure it in your env.");
+  }
 
   const parsed = baseUrlSchema.safeParse(raw);
-  return parsed.success ? parsed.data : DEFAULT_API_BASE_URL;
+  if (!parsed.success) {
+    throw new Error("VITE_API_BASE_URL is invalid. It must be a valid URL.");
+  }
+
+  return parsed.data;
 })();
 
 async function handleResponse<T>(response: Response): Promise<T> {
