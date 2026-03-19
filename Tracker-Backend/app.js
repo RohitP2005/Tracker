@@ -16,12 +16,27 @@ const allowedOrigins = allowedOriginsEnv
 	? allowedOriginsEnv.split(",").map((o) => o.trim()).filter(Boolean)
 	: ["*"];
 
+// CORS configuration: allow all origins in development,
+// restrict to CORS_ORIGINS in production.
 app.use(
 	cors({
 		origin(origin, callback) {
 			// Allow same-origin or tools (no origin header)
 			if (!origin) return callback(null, true);
-			if (allowedOrigins.includes(origin)) return callback(null, true);
+
+			// In non-production, allow any origin (useful for local dev)
+			if (process.env.NODE_ENV !== "production") {
+				return callback(null, true);
+			}
+
+			// In production, respect configured origins. Support '*' as wildcard.
+			if (
+				allowedOrigins.includes("*") ||
+				allowedOrigins.includes(origin)
+			) {
+				return callback(null, true);
+			}
+
 			return callback(new Error("Not allowed by CORS"));
 		},
 		credentials: true,
