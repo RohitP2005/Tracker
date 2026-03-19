@@ -11,8 +11,10 @@ const PORT = process.env.PORT || 3000;
 const MONGO_URI = process.env.MONGODB_URI;
 
 // CORS: only allow requests from configured frontend origins
-const allowedOriginsEnv = process.env.CORS_ORIGINS || "http://localhost:8080";
-const allowedOrigins = allowedOriginsEnv.split(",").map((o) => o.trim()).filter(Boolean);
+const allowedOriginsEnv = process.env.CORS_ORIGINS || "";
+const allowedOrigins = allowedOriginsEnv
+	? allowedOriginsEnv.split(",").map((o) => o.trim()).filter(Boolean)
+	: ["*"];
 
 app.use(
 	cors({
