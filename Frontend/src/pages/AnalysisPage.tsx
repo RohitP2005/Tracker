@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { getDailyCompletionData, getCompletionRate, getDailyDietData, getDietCompletionRate } from '@/lib/store';
 import { Flame, Dumbbell } from 'lucide-react';
@@ -6,26 +6,46 @@ import { Flame, Dumbbell } from 'lucide-react';
 type Range = 'week' | 'month';
 type AnalysisView = 'tasks' | 'diet';
 
+type DailyEntry = { date: string; day: string; total: number; completed: number; rate: number };
+type DietEntry = DailyEntry & { caloriesConsumed: number; caloriesTotal: number; proteinConsumed: number; proteinTotal: number };
+
 export default function AnalysisPage() {
   const [range, setRange] = useState<Range>('week');
   const [view, setView] = useState<AnalysisView>('tasks');
   const today = new Date();
   const days = range === 'week' ? 7 : 30;
 
-  const taskData = useMemo(() => getDailyCompletionData(today, days), [range]);
-  const dietData = useMemo(() => getDailyDietData(today, days), [range]);
+  const [taskData, setTaskData] = useState<DailyEntry[]>([]);
+  const [dietData, setDietData] = useState<DietEntry[]>([]);
+  const [taskRate, setTaskRate] = useState(0);
+  const [dietRate, setDietRate] = useState(0);
+  const [prevTaskRate, setPrevTaskRate] = useState(0);
+  const [prevDietRate, setPrevDietRate] = useState(0);
 
-  const weekStart = new Date(today); weekStart.setDate(weekStart.getDate() - 6);
-  const monthStart = new Date(today); monthStart.setDate(monthStart.getDate() - 29);
-  const start = range === 'week' ? weekStart : monthStart;
+  useEffect(() => {
+    const weekStart = new Date(today); weekStart.setDate(weekStart.getDate() - 6);
+    const monthStart = new Date(today); monthStart.setDate(monthStart.getDate() - 29);
+    const start = range === 'week' ? weekStart : monthStart;
+    const prevEnd = new Date(start); prevEnd.setDate(prevEnd.getDate() - 1);
+    const prevStart = new Date(prevEnd); prevStart.setDate(prevStart.getDate() - days + 1);
 
-  const taskRate = getCompletionRate(start, today);
-  const dietRate = getDietCompletionRate(start, today);
+    Promise.all([
+      getDailyCompletionData(today, days),
+      getDailyDietData(today, days),
+      getCompletionRate(start, today),
+      getDietCompletionRate(start, today),
+      getCompletionRate(prevStart, prevEnd),
+      getDietCompletionRate(prevStart, prevEnd),
+    ]).then(([td, dd, tr, dr, ptr, pdr]) => {
+      setTaskData(td as DailyEntry[]);
+      setDietData(dd as DietEntry[]);
+      setTaskRate(tr);
+      setDietRate(dr);
+      setPrevTaskRate(ptr);
+      setPrevDietRate(pdr);
+    });
+  }, [range]);
 
-  const prevEnd = new Date(start); prevEnd.setDate(prevEnd.getDate() - 1);
-  const prevStart = new Date(prevEnd); prevStart.setDate(prevStart.getDate() - days + 1);
-  const prevTaskRate = getCompletionRate(prevStart, prevEnd);
-  const prevDietRate = getDietCompletionRate(prevStart, prevEnd);
   const taskDiff = taskRate - prevTaskRate;
   const dietDiff = dietRate - prevDietRate;
 
@@ -35,10 +55,10 @@ export default function AnalysisPage() {
   const maxTotal = Math.max(...data.map(d => d.total), 1);
 
   // Diet aggregate stats
-  const totalCalConsumed = dietData.reduce((s, d) => s + (d as any).caloriesConsumed, 0);
-  const totalCalPlanned = dietData.reduce((s, d) => s + (d as any).caloriesTotal, 0);
-  const totalProtConsumed = dietData.reduce((s, d) => s + (d as any).proteinConsumed, 0);
-  const totalProtPlanned = dietData.reduce((s, d) => s + (d as any).proteinTotal, 0);
+  const totalCalConsumed = dietData.reduce((s, d) => s + d.caloriesConsumed, 0);
+  const totalCalPlanned = dietData.reduce((s, d) => s + d.caloriesTotal, 0);
+  const totalProtConsumed = dietData.reduce((s, d) => s + d.proteinConsumed, 0);
+  const totalProtPlanned = dietData.reduce((s, d) => s + d.proteinTotal, 0);
 
   return (
     <div className="min-h-screen pb-28">

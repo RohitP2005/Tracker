@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { DietItem, PERIODS, Period } from '@/lib/types';
 import DietCard from './DietCard';
 import { isDietCompleted, toggleDietCompletion } from '@/lib/store';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface DietSectionProps {
   period: Period;
@@ -14,8 +14,16 @@ interface DietSectionProps {
 
 export default function DietSection({ period, items, date, isActive, onUpdate }: DietSectionProps) {
   const [collapsed, setCollapsed] = useState(!isActive);
+  const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   const periodInfo = PERIODS.find(p => p.key === period)!;
-  const completedCount = items.filter(i => isDietCompleted(i.id, date)).length;
+
+  useEffect(() => {
+    Promise.all(items.map(i => isDietCompleted(i.id, date))).then(results => {
+      setCompletedIds(new Set(items.filter((_, idx) => results[idx]).map(i => i.id)));
+    });
+  }, [items, date]);
+
+  const completedCount = completedIds.size;
 
   if (items.length === 0) return null;
 
@@ -43,8 +51,8 @@ export default function DietSection({ period, items, date, isActive, onUpdate }:
             <motion.div key={item.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
               <DietCard
                 item={item}
-                completed={isDietCompleted(item.id, date)}
-                onToggle={() => { toggleDietCompletion(item.id, date); onUpdate(); }}
+                completed={completedIds.has(item.id)}
+                onToggle={() => { void toggleDietCompletion(item.id, date).then(onUpdate); }}
               />
             </motion.div>
           ))}

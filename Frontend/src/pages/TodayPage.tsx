@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { PERIODS, Period, Task, DietItem } from '@/lib/types';
 import { getTasksForDate, getMissedTasks, isTaskCompleted, getDietForDate, isDietCompleted } from '@/lib/store';
 import GhostBar from '@/components/GhostBar';
@@ -20,12 +20,32 @@ export default function TodayPage({ syncVersion }: TodayPageProps) {
   const [updateKey, setUpdateKey] = useState(0);
   const [view, setView] = useState<'tasks' | 'diet'>('tasks');
   const today = new Date();
-  const tasks = getTasksForDate(today);
-  const missed = getMissedTasks(today);
   const currentPeriod = getCurrentPeriod();
-  const dietItems = getDietForDate(today);
 
-  const completedCount = tasks.filter(t => isTaskCompleted(t.id, today)).length;
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [missed, setMissed] = useState<Task[]>([]);
+  const [dietItems, setDietItems] = useState<DietItem[]>([]);
+  const [completedTaskIds, setCompletedTaskIds] = useState<Set<string>>(new Set());
+  const [completedDietIds, setCompletedDietIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const today = new Date();
+    Promise.all([
+      getTasksForDate(today),
+      getMissedTasks(today),
+      getDietForDate(today),
+    ]).then(async ([t, m, d]) => {
+      setTasks(t);
+      setMissed(m);
+      setDietItems(d);
+      const taskChecks = await Promise.all(t.map(task => isTaskCompleted(task.id, today)));
+      setCompletedTaskIds(new Set(t.filter((_, i) => taskChecks[i]).map(task => task.id)));
+      const dietChecks = await Promise.all(d.map(item => isDietCompleted(item.id, today)));
+      setCompletedDietIds(new Set(d.filter((_, i) => dietChecks[i]).map(item => item.id)));
+    });
+  }, [syncVersion, updateKey]);
+
+  const completedCount = completedTaskIds.size;
   const totalCount = tasks.length;
 
   const tasksByPeriod = PERIODS.reduce((acc, p) => {
@@ -39,7 +59,7 @@ export default function TodayPage({ syncVersion }: TodayPageProps) {
   }, {} as Record<Period, DietItem[]>);
 
   // Diet stats
-  const completedDiet = dietItems.filter(d => isDietCompleted(d.id, today));
+  const completedDiet = dietItems.filter(d => completedDietIds.has(d.id));
   const totalCalories = dietItems.reduce((s, d) => s + d.calories, 0);
   const consumedCalories = completedDiet.reduce((s, d) => s + d.calories, 0);
   const totalProtein = dietItems.reduce((s, d) => s + d.protein, 0);

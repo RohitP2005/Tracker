@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { Task, PERIODS, Period } from '@/lib/types';
 import TaskCard from './TaskCard';
 import { isTaskCompleted, toggleTaskCompletion } from '@/lib/store';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface PeriodSectionProps {
   period: Period;
@@ -14,8 +14,16 @@ interface PeriodSectionProps {
 
 export default function PeriodSection({ period, tasks, date, isActive, onUpdate }: PeriodSectionProps) {
   const [collapsed, setCollapsed] = useState(!isActive);
+  const [completedIds, setCompletedIds] = useState<Set<string>>(new Set());
   const periodInfo = PERIODS.find(p => p.key === period)!;
-  const completedCount = tasks.filter(t => isTaskCompleted(t.id, date)).length;
+
+  useEffect(() => {
+    Promise.all(tasks.map(t => isTaskCompleted(t.id, date))).then(results => {
+      setCompletedIds(new Set(tasks.filter((_, i) => results[i]).map(t => t.id)));
+    });
+  }, [tasks, date]);
+
+  const completedCount = completedIds.size;
 
   if (tasks.length === 0) return null;
 
@@ -43,8 +51,8 @@ export default function PeriodSection({ period, tasks, date, isActive, onUpdate 
             <motion.div key={task.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
               <TaskCard
                 task={task}
-                completed={isTaskCompleted(task.id, date)}
-                onToggle={() => { toggleTaskCompletion(task.id, date); onUpdate(); }}
+                completed={completedIds.has(task.id)}
+                onToggle={() => { void toggleTaskCompletion(task.id, date).then(onUpdate); }}
               />
             </motion.div>
           ))}

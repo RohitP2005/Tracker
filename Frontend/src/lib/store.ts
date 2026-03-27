@@ -1,14 +1,19 @@
 import { WeeklyTask, CompletionRecord, Task, Period, DietItem, WeeklyDietItem, DietCompletionRecord } from './types';
 import { apiGet, apiPut } from './api';
 
-const STORAGE_KEYS = {
-  weeklyTasks: 'rhythm-weekly-tasks',
-  specialTasks: 'rhythm-special-tasks',
-  completions: 'rhythm-completions',
-  weeklyDiet: 'rhythm-weekly-diet',
-  specialDiet: 'rhythm-special-diet',
-  dietCompletions: 'rhythm-diet-completions',
-};
+// ─── OFFLINE / LOCAL-STORAGE LAYER DISABLED ──────────────────────────────────
+// All state now flows directly through the backend API and MongoDB.
+// The localStorage cache and offline-sync helpers below are commented out.
+//
+// const STORAGE_KEYS = {
+//   weeklyTasks: 'rhythm-weekly-tasks',
+//   specialTasks: 'rhythm-special-tasks',
+//   completions: 'rhythm-completions',
+//   weeklyDiet: 'rhythm-weekly-diet',
+//   specialDiet: 'rhythm-special-diet',
+//   dietCompletions: 'rhythm-diet-completions',
+// };
+// ─────────────────────────────────────────────────────────────────────────────
 
 const DEFAULT_WEEKLY_TASKS: WeeklyTask[] = [
   { id: '1', name: 'Cleanser', duration: 2, period: 'morning', days: [0,1,2,3,4,5,6] },
@@ -52,17 +57,19 @@ function normalizeWeeklyDiet(items: WeeklyDietItem[] | unknown): WeeklyDietItem[
   });
 }
 
-function load<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
-  } catch { return fallback; }
-}
-
-function save<T>(key: string, data: T) {
-  localStorage.setItem(key, JSON.stringify(data));
-  void pushStateToServer();
-}
+// ─── OFFLINE HELPERS DISABLED ─────────────────────────────────────────────────
+// function load<T>(key: string, fallback: T): T {
+//   try {
+//     const raw = localStorage.getItem(key);
+//     return raw ? JSON.parse(raw) : fallback;
+//   } catch { return fallback; }
+// }
+//
+// function save<T>(key: string, data: T) {
+//   localStorage.setItem(key, JSON.stringify(data));
+//   void pushStateToServer();
+// }
+// ─────────────────────────────────────────────────────────────────────────────
 
 type ServerState = {
   weeklyTasks: WeeklyTask[];
@@ -73,240 +80,272 @@ type ServerState = {
   dietCompletions: DietCompletionRecord[];
 };
 
-let pushing = false;
+// ─── OFFLINE PUSH DISABLED ───────────────────────────────────────────────────
+// let pushing = false;
+//
+// function getLocalState(): ServerState {
+//   return {
+//     weeklyTasks: normalizeWeeklyTasks(load(STORAGE_KEYS.weeklyTasks, DEFAULT_WEEKLY_TASKS)),
+//     specialTasks: load(STORAGE_KEYS.specialTasks, [] as Task[]),
+//     completions: load(STORAGE_KEYS.completions, [] as CompletionRecord[]),
+//     weeklyDiet: normalizeWeeklyDiet(load(STORAGE_KEYS.weeklyDiet, DEFAULT_WEEKLY_DIET)),
+//     specialDiet: load(STORAGE_KEYS.specialDiet, [] as DietItem[]),
+//     dietCompletions: load(STORAGE_KEYS.dietCompletions, [] as DietCompletionRecord[]),
+//   };
+// }
+//
+// async function pushStateToServer() {
+//   if (pushing) return;
+//   pushing = true;
+//   try {
+//     const state = getLocalState();
+//     await apiPut<ServerState, void>('/state', state);
+//   } catch (error) {
+//     // Fail silently; remain fully functional offline.
+//     console.error('Failed to sync state to server', error);
+//   } finally {
+//     pushing = false;
+//   }
+// }
+// ─────────────────────────────────────────────────────────────────────────────
 
-function getLocalState(): ServerState {
-  return {
-    weeklyTasks: normalizeWeeklyTasks(load(STORAGE_KEYS.weeklyTasks, DEFAULT_WEEKLY_TASKS)),
-    specialTasks: load(STORAGE_KEYS.specialTasks, [] as Task[]),
-    completions: load(STORAGE_KEYS.completions, [] as CompletionRecord[]),
-    weeklyDiet: normalizeWeeklyDiet(load(STORAGE_KEYS.weeklyDiet, DEFAULT_WEEKLY_DIET)),
-    specialDiet: load(STORAGE_KEYS.specialDiet, [] as DietItem[]),
-    dietCompletions: load(STORAGE_KEYS.dietCompletions, [] as DietCompletionRecord[]),
-  };
+// In-memory cache of the current server state (fetched once per session).
+let _state: ServerState | null = null;
+
+async function getState(): Promise<ServerState> {
+  if (_state) return _state;
+  try {
+    const remote = await apiGet<ServerState>('/state');
+    _state = {
+      weeklyTasks: normalizeWeeklyTasks(remote.weeklyTasks ?? DEFAULT_WEEKLY_TASKS),
+      specialTasks: remote.specialTasks ?? [],
+      completions: remote.completions ?? [],
+      weeklyDiet: normalizeWeeklyDiet(remote.weeklyDiet ?? DEFAULT_WEEKLY_DIET),
+      specialDiet: remote.specialDiet ?? [],
+      dietCompletions: remote.dietCompletions ?? [],
+    };
+  } catch {
+    _state = {
+      weeklyTasks: normalizeWeeklyTasks(DEFAULT_WEEKLY_TASKS),
+      specialTasks: [],
+      completions: [],
+      weeklyDiet: normalizeWeeklyDiet(DEFAULT_WEEKLY_DIET),
+      specialDiet: [],
+      dietCompletions: [],
+    };
+  }
+  return _state;
 }
 
-async function pushStateToServer() {
-  if (pushing) return;
-  pushing = true;
-  try {
-    const state = getLocalState();
-    await apiPut<ServerState, void>('/state', state);
-  } catch (error) {
-    // Fail silently; remain fully functional offline.
-    console.error('Failed to sync state to server', error);
-  } finally {
-    pushing = false;
-  }
+async function persistState(next: ServerState): Promise<void> {
+  _state = next;
+  await apiPut<ServerState, void>('/state', next);
 }
 
 export async function syncFromServer() {
-  try {
-    const remote = await apiGet<ServerState>('/state');
-    if (!remote) return;
-
-    try {
-      const weeklyTasks = normalizeWeeklyTasks(remote.weeklyTasks ?? DEFAULT_WEEKLY_TASKS);
-      const weeklyDiet = normalizeWeeklyDiet(remote.weeklyDiet ?? DEFAULT_WEEKLY_DIET);
-
-      localStorage.setItem(STORAGE_KEYS.weeklyTasks, JSON.stringify(weeklyTasks));
-      localStorage.setItem(STORAGE_KEYS.specialTasks, JSON.stringify(remote.specialTasks ?? []));
-      localStorage.setItem(STORAGE_KEYS.completions, JSON.stringify(remote.completions ?? []));
-      localStorage.setItem(STORAGE_KEYS.weeklyDiet, JSON.stringify(weeklyDiet));
-      localStorage.setItem(STORAGE_KEYS.specialDiet, JSON.stringify(remote.specialDiet ?? []));
-      localStorage.setItem(STORAGE_KEYS.dietCompletions, JSON.stringify(remote.dietCompletions ?? []));
-    } catch {
-      // Ignore storage errors; state will still be available in memory for this session via getLocalState.
-    }
-  } catch (error) {
-    console.error('Failed to pull state from server', error);
-  }
+  _state = null;
+  await getState();
 }
 
 // --- Tasks ---
-export function getWeeklyTasks(): WeeklyTask[] {
-  return load(STORAGE_KEYS.weeklyTasks, DEFAULT_WEEKLY_TASKS);
+export async function getWeeklyTasks(): Promise<WeeklyTask[]> {
+  return (await getState()).weeklyTasks;
 }
 
-export function saveWeeklyTasks(tasks: WeeklyTask[]) {
-  save(STORAGE_KEYS.weeklyTasks, tasks);
+export async function saveWeeklyTasks(tasks: WeeklyTask[]) {
+  const s = await getState();
+  await persistState({ ...s, weeklyTasks: tasks });
 }
 
-export function getSpecialTasks(): Task[] {
-  return load(STORAGE_KEYS.specialTasks, []);
+export async function getSpecialTasks(): Promise<Task[]> {
+  return (await getState()).specialTasks;
 }
 
-export function saveSpecialTasks(tasks: Task[]) {
-  save(STORAGE_KEYS.specialTasks, tasks);
+export async function saveSpecialTasks(tasks: Task[]) {
+  const s = await getState();
+  await persistState({ ...s, specialTasks: tasks });
 }
 
-export function getCompletions(): CompletionRecord[] {
-  return load(STORAGE_KEYS.completions, []);
+export async function getCompletions(): Promise<CompletionRecord[]> {
+  return (await getState()).completions;
 }
 
-export function saveCompletions(records: CompletionRecord[]) {
-  save(STORAGE_KEYS.completions, records);
+export async function saveCompletions(records: CompletionRecord[]) {
+  const s = await getState();
+  await persistState({ ...s, completions: records });
 }
 
-export function getTasksForDate(date: Date): Task[] {
+export async function getTasksForDate(date: Date): Promise<Task[]> {
   const dayOfWeek = date.getDay();
   const dateStr = date.toISOString().split('T')[0];
-  
-  const weekly = getWeeklyTasks()
+  const s = await getState();
+
+  const weekly = s.weeklyTasks
     .filter(t => Array.isArray((t as any).days) && (t as any).days.includes(dayOfWeek))
     .map(({ days, ...rest }) => rest as Task);
-  
-  const special = getSpecialTasks().filter(t => t.specialDate === dateStr);
-  
+
+  const special = s.specialTasks.filter(t => t.specialDate === dateStr);
+
   return [...weekly, ...special];
 }
 
-export function isTaskCompleted(taskId: string, date: Date): boolean {
+export async function isTaskCompleted(taskId: string, date: Date): Promise<boolean> {
   const dateStr = date.toISOString().split('T')[0];
-  return getCompletions().some(c => c.taskId === taskId && c.date === dateStr && c.completed);
+  const completions = await getCompletions();
+  return completions.some(c => c.taskId === taskId && c.date === dateStr && c.completed);
 }
 
-export function toggleTaskCompletion(taskId: string, date: Date) {
+export async function toggleTaskCompletion(taskId: string, date: Date) {
   const dateStr = date.toISOString().split('T')[0];
-  const completions = getCompletions();
+  const s = await getState();
+  const completions = [...s.completions];
   const existing = completions.findIndex(c => c.taskId === taskId && c.date === dateStr);
-  
+
   if (existing >= 0) {
-    completions[existing].completed = !completions[existing].completed;
+    completions[existing] = { ...completions[existing], completed: !completions[existing].completed };
   } else {
     completions.push({ taskId, date: dateStr, completed: true });
   }
-  
-  saveCompletions(completions);
+
+  await persistState({ ...s, completions });
 }
 
-export function getMissedTasks(date: Date): Task[] {
+export async function getMissedTasks(date: Date): Promise<Task[]> {
   const yesterday = new Date(date);
   yesterday.setDate(yesterday.getDate() - 1);
-  const tasks = getTasksForDate(yesterday);
-  return tasks.filter(t => !isTaskCompleted(t.id, yesterday));
+  const tasks = await getTasksForDate(yesterday);
+  const checks = await Promise.all(tasks.map(t => isTaskCompleted(t.id, yesterday)));
+  return tasks.filter((_, i) => !checks[i]);
 }
 
 // --- Diet ---
-export function getWeeklyDiet(): WeeklyDietItem[] {
-  return load(STORAGE_KEYS.weeklyDiet, DEFAULT_WEEKLY_DIET);
+export async function getWeeklyDiet(): Promise<WeeklyDietItem[]> {
+  return (await getState()).weeklyDiet;
 }
 
-export function saveWeeklyDiet(items: WeeklyDietItem[]) {
-  save(STORAGE_KEYS.weeklyDiet, items);
+export async function saveWeeklyDiet(items: WeeklyDietItem[]) {
+  const s = await getState();
+  await persistState({ ...s, weeklyDiet: items });
 }
 
-export function getSpecialDiet(): DietItem[] {
-  return load(STORAGE_KEYS.specialDiet, []);
+export async function getSpecialDiet(): Promise<DietItem[]> {
+  return (await getState()).specialDiet;
 }
 
-export function saveSpecialDiet(items: DietItem[]) {
-  save(STORAGE_KEYS.specialDiet, items);
+export async function saveSpecialDiet(items: DietItem[]) {
+  const s = await getState();
+  await persistState({ ...s, specialDiet: items });
 }
 
-export function getDietCompletions(): DietCompletionRecord[] {
-  return load(STORAGE_KEYS.dietCompletions, []);
+export async function getDietCompletions(): Promise<DietCompletionRecord[]> {
+  return (await getState()).dietCompletions;
 }
 
-export function saveDietCompletions(records: DietCompletionRecord[]) {
-  save(STORAGE_KEYS.dietCompletions, records);
+export async function saveDietCompletions(records: DietCompletionRecord[]) {
+  const s = await getState();
+  await persistState({ ...s, dietCompletions: records });
 }
 
-export function getDietForDate(date: Date): DietItem[] {
+export async function getDietForDate(date: Date): Promise<DietItem[]> {
   const dayOfWeek = date.getDay();
   const dateStr = date.toISOString().split('T')[0];
-  
-  const weekly = getWeeklyDiet()
+  const s = await getState();
+
+  const weekly = s.weeklyDiet
     .filter(t => Array.isArray((t as any).days) && (t as any).days.includes(dayOfWeek))
     .map(({ days, ...rest }) => rest as DietItem);
-  
-  const special = getSpecialDiet().filter(t => (t as any).specialDate === dateStr);
-  
+
+  const special = s.specialDiet.filter(t => (t as any).specialDate === dateStr);
+
   return [...weekly, ...special];
 }
 
-export function isDietCompleted(itemId: string, date: Date): boolean {
+export async function isDietCompleted(itemId: string, date: Date): Promise<boolean> {
   const dateStr = date.toISOString().split('T')[0];
-  return getDietCompletions().some(c => c.itemId === itemId && c.date === dateStr && c.completed);
+  const completions = await getDietCompletions();
+  return completions.some(c => c.itemId === itemId && c.date === dateStr && c.completed);
 }
 
-export function toggleDietCompletion(itemId: string, date: Date) {
+export async function toggleDietCompletion(itemId: string, date: Date) {
   const dateStr = date.toISOString().split('T')[0];
-  const completions = getDietCompletions();
+  const s = await getState();
+  const completions = [...s.dietCompletions];
   const existing = completions.findIndex(c => c.itemId === itemId && c.date === dateStr);
-  
+
   if (existing >= 0) {
-    completions[existing].completed = !completions[existing].completed;
+    completions[existing] = { ...completions[existing], completed: !completions[existing].completed };
   } else {
     completions.push({ itemId, date: dateStr, completed: true });
   }
-  
-  saveDietCompletions(completions);
+
+  await persistState({ ...s, dietCompletions: completions });
 }
 
 // --- Analysis ---
-export function getCompletionRate(startDate: Date, endDate: Date): number {
+export async function getCompletionRate(startDate: Date, endDate: Date): Promise<number> {
   let total = 0;
   let completed = 0;
-  
+
   const current = new Date(startDate);
   while (current <= endDate) {
-    const tasks = getTasksForDate(current);
+    const tasks = await getTasksForDate(current);
     total += tasks.length;
-    tasks.forEach(t => {
-      if (isTaskCompleted(t.id, current)) completed++;
-    });
+    const checks = await Promise.all(tasks.map(t => isTaskCompleted(t.id, current)));
+    completed += checks.filter(Boolean).length;
     current.setDate(current.getDate() + 1);
   }
-  
+
   return total === 0 ? 0 : Math.round((completed / total) * 100);
 }
 
-export function getDailyCompletionData(startDate: Date, days: number) {
+export async function getDailyCompletionData(startDate: Date, days: number) {
   const data = [];
   const current = new Date(startDate);
   current.setDate(current.getDate() - days + 1);
-  
+
   for (let i = 0; i < days; i++) {
-    const tasks = getTasksForDate(current);
-    const completed = tasks.filter(t => isTaskCompleted(t.id, current)).length;
+    const tasks = await getTasksForDate(current);
+    const checks = await Promise.all(tasks.map(t => isTaskCompleted(t.id, current)));
+    const completedCount = checks.filter(Boolean).length;
     data.push({
       date: current.toISOString().split('T')[0],
       day: current.toLocaleDateString('en', { weekday: 'short' }),
       total: tasks.length,
-      completed,
-      rate: tasks.length === 0 ? 0 : Math.round((completed / tasks.length) * 100),
+      completed: completedCount,
+      rate: tasks.length === 0 ? 0 : Math.round((completedCount / tasks.length) * 100),
     });
     current.setDate(current.getDate() + 1);
   }
   return data;
 }
 
-export function getDietCompletionRate(startDate: Date, endDate: Date): number {
+export async function getDietCompletionRate(startDate: Date, endDate: Date): Promise<number> {
   let total = 0;
   let completed = 0;
-  
+
   const current = new Date(startDate);
   while (current <= endDate) {
-    const items = getDietForDate(current);
+    const items = await getDietForDate(current);
     total += items.length;
-    items.forEach(item => {
-      if (isDietCompleted(item.id, current)) completed++;
-    });
+    const checks = await Promise.all(items.map(item => isDietCompleted(item.id, current)));
+    completed += checks.filter(Boolean).length;
     current.setDate(current.getDate() + 1);
   }
-  
+
   return total === 0 ? 0 : Math.round((completed / total) * 100);
 }
 
-export function getDailyDietData(startDate: Date, days: number) {
+// ─── getDailyDietData (used by AnalysisPage) ─────────────────────────────────
+export async function getDailyDietData(startDate: Date, days: number) {
   const data = [];
   const current = new Date(startDate);
   current.setDate(current.getDate() - days + 1);
-  
+
   for (let i = 0; i < days; i++) {
-    const items = getDietForDate(current);
-    const completedItems = items.filter(item => isDietCompleted(item.id, current));
+    const items = await getDietForDate(current);
+    const completedItems = await Promise.all(
+      items.map(async item => (await isDietCompleted(item.id, current)) ? item : null)
+    ).then(results => items.filter((_, idx) => results[idx] !== null));
     data.push({
       date: current.toISOString().split('T')[0],
       day: current.toLocaleDateString('en', { weekday: 'short' }),

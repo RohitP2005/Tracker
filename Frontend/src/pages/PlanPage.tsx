@@ -12,9 +12,9 @@ type PlanPageProps = { syncVersion: number };
 
 export default function PlanPage({ syncVersion }: PlanPageProps) {
   const [mode, setMode] = useState<ViewMode>('weekly');
-  const [weeklyTasks, setWeeklyTasks] = useState<WeeklyTask[]>(getWeeklyTasks());
-  const [specialTasks, setSpecialTasks] = useState<Task[]>(getSpecialTasks());
-  const [weeklyDiet, setWeeklyDiet] = useState<WeeklyDietItem[]>(getWeeklyDiet());
+  const [weeklyTasks, setWeeklyTasks] = useState<WeeklyTask[]>([]);
+  const [specialTasks, setSpecialTasks] = useState<Task[]>([]);
+  const [weeklyDiet, setWeeklyDiet] = useState<WeeklyDietItem[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [updateKey, setUpdateKey] = useState(0);
 
@@ -32,14 +32,14 @@ export default function PlanPage({ syncVersion }: PlanPageProps) {
 
   const refresh = useCallback(() => setUpdateKey(k => k + 1), []);
 
-  // When the backend sync completes (signaled via syncVersion from App),
-  // re-read the latest state from localStorage so this tab/device shows
-  // the cloud data instead of the initial hardcoded defaults.
+  // When syncVersion changes (after server sync), re-load state from the API.
   useEffect(() => {
-    setWeeklyTasks(getWeeklyTasks());
-    setSpecialTasks(getSpecialTasks());
-    setWeeklyDiet(getWeeklyDiet());
-    refresh();
+    Promise.all([getWeeklyTasks(), getSpecialTasks(), getWeeklyDiet()]).then(([wt, st, wd]) => {
+      setWeeklyTasks(wt);
+      setSpecialTasks(st);
+      setWeeklyDiet(wd);
+      refresh();
+    });
   }, [syncVersion, refresh]);
 
   const resetForm = () => {
@@ -64,7 +64,7 @@ export default function PlanPage({ syncVersion }: PlanPageProps) {
       };
       const updated = [...weeklyDiet, item];
       setWeeklyDiet(updated);
-      saveWeeklyDiet(updated);
+      void saveWeeklyDiet(updated);
     } else if (isSpecial) {
       if (!newDate) return;
       const task: Task = {
@@ -78,7 +78,7 @@ export default function PlanPage({ syncVersion }: PlanPageProps) {
       };
       const updated = [...specialTasks, task];
       setSpecialTasks(updated);
-      saveSpecialTasks(updated);
+      void saveSpecialTasks(updated);
     } else {
       const task: WeeklyTask = {
         id: generateId(),
@@ -90,7 +90,7 @@ export default function PlanPage({ syncVersion }: PlanPageProps) {
       };
       const updated = [...weeklyTasks, task];
       setWeeklyTasks(updated);
-      saveWeeklyTasks(updated);
+      void saveWeeklyTasks(updated);
     }
 
     resetForm();
@@ -99,15 +99,15 @@ export default function PlanPage({ syncVersion }: PlanPageProps) {
 
   const deleteWeekly = (id: string) => {
     const updated = weeklyTasks.filter(t => t.id !== id);
-    setWeeklyTasks(updated); saveWeeklyTasks(updated);
+    setWeeklyTasks(updated); void saveWeeklyTasks(updated);
   };
   const deleteSpecial = (id: string) => {
     const updated = specialTasks.filter(t => t.id !== id);
-    setSpecialTasks(updated); saveSpecialTasks(updated);
+    setSpecialTasks(updated); void saveSpecialTasks(updated);
   };
   const deleteDiet = (id: string) => {
     const updated = weeklyDiet.filter(d => d.id !== id);
-    setWeeklyDiet(updated); saveWeeklyDiet(updated);
+    setWeeklyDiet(updated); void saveWeeklyDiet(updated);
   };
 
   const toggleDay = (day: number) => {
